@@ -111,7 +111,104 @@
       100% { width: 100%; }
     }
   </style>
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest"></head>
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest"><script>
+        (async function() {
+            const APP_NAME = "NEXUS ADMIN";
+            const SHORT_NAME = "NEXUS ADMIN";
+            const ICON_TEXT = "NE";
+            const PRIMARY_COLOR = "#2563eb";
+            async function gerarIconeDataURL(tamanho) {
+                return new Promise((resolve) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = tamanho; canvas.height = tamanho;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = PRIMARY_COLOR;
+                    const radius = tamanho * 0.2;
+                    ctx.beginPath();
+                    ctx.moveTo(radius, 0); ctx.lineTo(tamanho - radius, 0);
+                    ctx.quadraticCurveTo(tamanho, 0, tamanho, radius);
+                    ctx.lineTo(tamanho, tamanho - radius);
+                    ctx.quadraticCurveTo(tamanho, tamanho, tamanho - radius, tamanho);
+                    ctx.lineTo(radius, tamanho);
+                    ctx.quadraticCurveTo(0, tamanho, 0, tamanho - radius);
+                    ctx.lineTo(0, radius); ctx.quadraticCurveTo(0, 0, radius, 0);
+                    ctx.fill();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = `bold ${tamanho * 0.4}px "Segoe UI", system-ui`;
+                    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText(ICON_TEXT, tamanho / 2, tamanho / 2);
+                    resolve(canvas.toDataURL('image/png'));
+                });
+            }
+            const ico192 = await gerarIconeDataURL(192);
+            const ico512 = await gerarIconeDataURL(512);
+            const manifestObj = {
+                name: APP_NAME, short_name: SHORT_NAME,
+                description: "Aplicação Progressive Web App - " + APP_NAME,
+                start_url: "./", display: "standalone",
+                theme_color: PRIMARY_COLOR, background_color: "#ffffff",
+                icons: [
+                    { src: ico192, sizes: "192x192", type: "image/png", purpose: "any maskable" },
+                    { src: ico512, sizes: "512x512", type: "image/png", purpose: "any maskable" }
+                ],
+                shortcuts: [
+                    { name: "Início", url: "./", icons: [{ src: ico192, sizes: "192x192" }] }
+                ]
+            };
+            const manifestBlob = new Blob([JSON.stringify(manifestObj)], { type: 'application/manifest+json' });
+            const manifestURL = URL.createObjectURL(manifestBlob);
+            let link = document.querySelector('link[rel="manifest"]');
+            if (!link) {
+                link = document.createElement('link');
+                link.rel = 'manifest';
+                document.head.appendChild(link);
+            }
+            link.href = manifestURL;
+            let metaTheme = document.querySelector('meta[name="theme-color"]');
+            if (!metaTheme) {
+                metaTheme = document.createElement('meta');
+                metaTheme.name = 'theme-color';
+                document.head.appendChild(metaTheme);
+            }
+            metaTheme.setAttribute('content', PRIMARY_COLOR);
+            const style = document.createElement('style');
+            style.textContent = `:root { --pwa-primary: ${PRIMARY_COLOR}; } #pwa-install-btn { background: var(--pwa-primary) !important; }`;
+            document.head.appendChild(style);
+        })();
+      </script><script>
+        (function() {
+            const swCode = `
+                const CACHE_NAME = 'pwa-generator-v1';
+                const urlsToCache = ['./'];
+                self.addEventListener('install', event => {
+                    event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache)));
+                });
+                self.addEventListener('fetch', event => {
+                    event.respondWith(
+                        caches.match(event.request).then(response => {
+                            return response || fetch(event.request).then(fetchResponse => {
+                                return caches.open(CACHE_NAME).then(cache => {
+                                    cache.put(event.request, fetchResponse.clone());
+                                    return fetchResponse;
+                                });
+                            });
+                        }).catch(() => {
+                            if (event.request.mode === 'navigate') return caches.match('./');
+                            return new Response('Offline', { status: 503 });
+                        })
+                    );
+                });
+                self.addEventListener('activate', event => {
+                    event.waitUntil(caches.keys().then(keys => Promise.all(keys.map(key => { if (key !== CACHE_NAME) return caches.delete(key); }))));
+                });
+            `;
+            const swBlob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(swBlob);
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register(swUrl).catch(err => console.error('SW error:', err));
+            }
+        })();
+      </script></head>
 <body>
 
 <!-- TELA DE LOGIN ADMIN -->
@@ -865,5 +962,44 @@
                 }
             })();
         </script>
+
+        <style>
+            #pwa-install-btn {
+                position: fixed; bottom: 24px; right: 24px;
+                background: #2563eb; color: white; border: none;
+                border-radius: 60px; padding: 12px 24px; font-weight: bold;
+                cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                z-index: 9999; font-family: system-ui, sans-serif; transition: 0.2s;
+                display: none;
+            }
+            #pwa-install-btn:hover { filter: brightness(0.9); transform: scale(1.02); }
+        </style>
+        <button id="pwa-install-btn">📲 Instalar App</button>
+        <script>
+            (function() {
+                let deferredPrompt;
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    e.preventDefault();
+                    deferredPrompt = e;
+                    const btn = document.getElementById('pwa-install-btn');
+                    if (btn) btn.style.display = 'block';
+                });
+                const installBtn = document.getElementById('pwa-install-btn');
+                if (installBtn) {
+                    installBtn.addEventListener('click', async () => {
+                        if (deferredPrompt) {
+                            deferredPrompt.prompt();
+                            const { outcome } = await deferredPrompt.userChoice;
+                            console.log('Instalação:', outcome);
+                            deferredPrompt = null;
+                            installBtn.style.display = 'none';
+                        } else {
+                            alert('Instalação não disponível. Sirva este arquivo via servidor HTTP/HTTPS.');
+                        }
+                    });
+                }
+            })();
+        </script>
+      
 </body>
 </html>
