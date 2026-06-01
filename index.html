@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Nexus Admin | Painel de Controle</title>
+  <meta name="theme-color" content="#1e293b">
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #0f172a; }
+    .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); display: flex; align-items: center; justify-content: center; z-index: 10000; }
+    .login-card { background: white; border-radius: 32px; padding: 40px 32px; width: 90%; max-width: 400px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); text-align: center; }
+    .login-card h2 { margin-bottom: 24px; color: #2563eb; }
+    .login-card input { width: 100%; margin: 12px 0; padding: 14px 16px; border-radius: 28px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 16px; }
+    .login-card button { width: 100%; margin-top: 16px; background: #2563eb; color: white; border: none; padding: 12px; border-radius: 40px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .login-card button:hover { background: #1d4ed8; transform: translateY(-2px); }
+    .admin-app { display: none; }
+    .top-bar { background: #0f172a; color: white; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .top-bar h1 { font-size: 1.5rem; font-weight: 600; }
+    .user-info { display: flex; align-items: center; gap: 16px; }
+    .logout-btn { background: #ef4444; border: none; padding: 6px 16px; border-radius: 40px; cursor: pointer; color: white; font-weight: 500; }
+    .logout-btn:hover { background: #dc2626; }
+    .tab-bar { display: flex; flex-wrap: wrap; gap: 8px; background: white; padding: 12px 24px; border-bottom: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .tab { padding: 8px 20px; border-radius: 40px; font-weight: 500; cursor: pointer; background: transparent; color: #64748b; transition: all 0.2s; }
+    .tab.active { background: #2563eb; color: white; }
+    .panel { display: none; padding: 24px; max-width: 1400px; margin: 0 auto; }
+    .panel.active { display: block; }
+    .card-stats { background: white; border-radius: 24px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #eef2ff; }
+    .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin-bottom: 32px; }
+    .stat-number { font-size: 32px; font-weight: 700; margin-top: 8px; color: #2563eb; }
+    .chart-container { background: white; border-radius: 24px; padding: 20px; margin-top: 24px; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f8fafc; font-weight: 600; }
+    button { background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 40px; cursor: pointer; font-weight: 500; transition: 0.2s; }
+    button.sec { background: #64748b; }
+    button.danger { background: #ef4444; }
+    .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 20000; visibility: hidden; opacity: 0; transition: 0.2s; }
+    .modal.active { visibility: visible; opacity: 1; }
+    .modal-content { background: white; border-radius: 32px; padding: 24px; width: 90%; max-width: 500px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: 500; }
+    .form-group input, .form-group select { width: 100%; padding: 10px 12px; border-radius: 20px; border: 1px solid #cbd5e1; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 10px 20px; border-radius: 80px; z-index: 30000; animation: fadeOut 2.5s ease forwards; }
+    @keyframes fadeOut { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+    .filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+    .filters input, .filters select { padding: 8px 12px; border-radius: 40px; border: 1px solid #cbd5e1; }
+    @media (max-width: 640px) { .tab-bar { justify-content: center; } .top-bar { flex-direction: column; text-align: center; } }
+
+    /* ========== LOGO ANIMADA NEXUS ========== */
+    .login-card .logo-wrapper { margin-bottom: 16px !important; }
+    .login-card .logo-container { transform: scale(0.62); transform-origin: center; }
+    .top-bar .logo-container { transform: scale(0.78); transform-origin: left center; }
+    .logo-wrapper { display: inline-block; }
+    .logo-container { display: inline-flex; align-items: center; gap: 0.25em; position: relative; }
+    .bolt {
+      font-size: 2.4em;
+      filter: drop-shadow(0 0 12px #ffcc00) drop-shadow(0 0 24px #ff9900);
+      animation: boltPulse 2s infinite ease-in-out, boltEntry 0.8s ease-out;
+      display: inline-block;
+      transform-origin: center;
+      line-height: 1;
+    }
+    .text {
+      font-size: 1.7em;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #00d4ff, #7b2ff7, #00d4ff);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: textGlow 3s infinite linear;
+      white-space: nowrap;
+      position: relative;
+    }
+    .underline {
+      position: absolute;
+      bottom: -6px;
+      left: 0;
+      height: 3px;
+      width: 0%;
+      background: linear-gradient(90deg, #ffcc00, #ff6b6b, #7b2ff7);
+      border-radius: 2px;
+      animation: expandLine 1.2s 0.5s forwards ease-out;
+      box-shadow: 0 0 12px #ffcc00;
+    }
+    @keyframes boltEntry {
+      0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+      60% { transform: scale(1.3) rotate(5deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+    @keyframes boltPulse {
+      0%, 100% { filter: drop-shadow(0 0 8px #ffcc00) drop-shadow(0 0 16px #ff9900); }
+      50% { filter: drop-shadow(0 0 14px #ffaa00) drop-shadow(0 0 28px #ff5500); }
+    }
+    @keyframes textGlow {
+      0% { background-position: 0% center; }
+      100% { background-position: 200% center; }
+    }
+    @keyframes expandLine {
+      0% { width: 0%; }
+      100% { width: 100%; }
+    }
+  </style>
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest"></head>
+<body>
+
+<!-- TELA DE LOGIN ADMIN -->
+<div id="loginScreen" class="login-overlay">
+  <div class="login-card">
+    <div class="logo-wrapper" style="margin-bottom: 24px;">
+      <div class="logo-container">
+        <span class="bolt">⚡</span>
+        <span class="text">
+          Nexus Admin
+          <span class="underline"></span>
+        </span>
+      </div>
+    </div>
+    <input type="text" id="adminLoginNome" placeholder="Nome do administrador">
+    <input type="password" id="adminLoginSenha" placeholder="Senha">
+    <button id="adminLoginBtn">Acessar Painel</button>
+  </div>
+</div>
+
+<!-- PAINEL ADMIN -->
+<div id="adminApp" class="admin-app">
+  <div class="top-bar">
+    <div class="logo-wrapper">
+      <div class="logo-container">
+        <span class="bolt">⚡</span>
+        <span class="text">
+          Nexus Admin
+          <span class="underline"></span>
+        </span>
+      </div>
+    </div>
+    <div class="user-info">
+      <span id="adminNomeSpan"></span>
+      <button class="logout-btn" id="adminLogoutBtn">Sair</button>
+    </div>
+  </div>
+  <div class="tab-bar">
+    <div class="tab" data-panel="dashboard">📊 Dashboard</div>
+    <div class="tab" data-panel="tecnicos">👥 Técnicos</div>
+    <div class="tab" data-panel="servicos">📋 Todas as OS</div>
+    <div class="tab" data-panel="config">⚙️ Configurações</div>
+    <div class="tab" data-panel="logs">📜 Logs</div>
+  </div>
+
+  <div id="dashboardPanel" class="panel">
+    <div class="grid-cards" id="statsCards"></div>
+    <div class="chart-container"><canvas id="adminGraficoTipo" width="400" height="200"></canvas></div>
+    <div class="chart-container"><canvas id="adminGraficoMensal" width="400" height="200"></canvas></div>
+    <div style="margin-top: 24px; display: flex; gap: 16px; justify-content: flex-end;">
+      <button id="exportarExcelGlobal">📊 Exportar Excel Completo</button>
+      <button id="exportarPDFGlobal">📄 Exportar PDF Completo</button>
+    </div>
+  </div>
+
+  <div id="tecnicosPanel" class="panel">
+    <div style="margin-bottom: 24px;"><button id="novoTecnicoBtn">+ Novo Técnico</button></div>
+    <table id="tecnicosTable"><thead><tr><th>Nome</th><th>Papel</th><th>Total OS</th><th>Faturamento (R$)</th><th>Ações</th></tr></thead><tbody id="tecnicosTableBody"></tbody></table>
+  </div>
+
+  <div id="servicosPanel" class="panel">
+    <div class="filters">
+      <input type="text" id="filterCliente" placeholder="Cliente">
+      <select id="filterTipo"><option value="">Todos os tipos</option><option value="instalacao">Instalação</option><option value="mudanca">Mudança</option><option value="suporte">Suporte</option><option value="mesh">Mesh</option><option value="roku">Roku</option></select>
+      <select id="filterTecnico"></select>
+      <input type="date" id="filterDataInicio"><input type="date" id="filterDataFim">
+      <button id="aplicarFiltros">Filtrar</button><button id="limparFiltros">Limpar</button>
+    </div>
+    <div style="overflow-x: auto;">
+      <table id="servicosTable"><thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>Técnico</th><th>Detalhes</th></tr></thead><tbody id="servicosTableBody"></tbody></table>
+    </div>
+    <div style="margin-top: 20px; text-align: right;"><button id="exportarOSFiltradas">📎 Exportar Filtrados (Excel)</button></div>
+  </div>
+
+  <div id="configPanel" class="panel">
+    <div class="card-stats" style="max-width: 600px; margin: 0 auto;">
+      <h3>💰 Preços dos Serviços</h3>
+      <div class="form-group"><label>Instalação</label><input type="number" id="precoInstalacao" step="0.01"></div>
+      <div class="form-group"><label>Mudança</label><input type="number" id="precoMudanca" step="0.01"></div>
+      <div class="form-group"><label>Suporte</label><input type="number" id="precoSuporte" step="0.01"></div>
+      <div class="form-group"><label>Mesh</label><input type="number" id="precoMesh" step="0.01"></div>
+      <div class="form-group"><label>Roku</label><input type="number" id="precoRoku" step="0.01"></div>
+      <button id="salvarPrecos">Salvar Alterações</button>
+      <button id="resetarPrecos" class="sec">Restaurar Padrão</button>
+      <hr style="margin: 24px 0;">
+      <h3>💾 Backup e Importação</h3>
+      <button id="exportarJSONBackup">Exportar JSON Completo</button>
+      <button id="importarJSONBackup" class="sec">Importar JSON</button>
+    </div>
+  </div>
+
+  <div id="logsPanel" class="panel">
+    <div style="margin-bottom: 16px;"><button id="refreshLogs">🔄 Atualizar Logs</button></div>
+    <table id="logsTable"><thead><tr><th>Data/Hora</th><th>Admin</th><th>Ação</th><th>Detalhes</th></tr></thead><tbody id="logsTableBody"></tbody></table>
+    <p id="semLogsMsg" style="text-align:center; color:#64748b; margin-top:20px; display:none;">Nenhum log encontrado.</p>
+  </div>
+</div>
+
+<!-- Modal para detalhes da OS -->
+<div id="detalhesModal" class="modal">
+  <div class="modal-content">
+    <h3>📄 Detalhes do Serviço</h3>
+    <pre id="detalhesTexto" style="white-space: pre-wrap; margin: 16px 0; font-family: monospace; background: #f8fafc; padding: 12px; border-radius: 16px;"></pre>
+    <div style="display: flex; justify-content: flex-end;"><button onclick="fecharModalDetalhes()">Fechar</button></div>
+  </div>
+</div>
+
+<script>
+  // ========== CONFIGURAÇÃO FIREBASE ==========
+  const firebaseConfig = {
+    apiKey: "AIzaSyBemWLXjKCduVJzm5DsX16mlGuPJV1zMwI",
+    authDomain: "nexus-analytics-f8945.firebaseapp.com",
+    projectId: "nexus-analytics-f8945",
+    storageBucket: "nexus-analytics-f8945.firebasestorage.app",
+    messagingSenderId: "679736321681",
+    appId: "1:679736321681:web:cc72a192d7539550d70130"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  db.enablePersistence().catch(err => console.warn("Offline persistence error:", err));
+
+  const COLLECTION_APP = "appData";
+  const COLLECTION_TECNICOS = "tecnicos";
+  const COLLECTION_LOGS = "adminLogs";
+
+  let currentAdmin = null;
+  let dadosServicos = { instalacao: [], mudanca: [], suporte: [], mesh: [], roku: [] };
+  let precos = { instalacao: 75, mudanca: 75, suporte: 60, mesh: 80, roku: 70 };
+  let tecnicos = [];
+  let chartTipo = null, chartMensal = null;
+
+  function mostrarToast(msg, tipo = "sucesso") {
+    let toast = document.createElement("div");
+    toast.className = "toast";
+    toast.innerText = msg;
+    toast.style.background = tipo === "erro" ? "#dc2626" : "#1e293b";
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  async function hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function adicionarLog(acao, detalhes = "") {
+    if (!currentAdmin) return;
+    try {
+      await db.collection(COLLECTION_LOGS).add({
+        adminId: currentAdmin.id,
+        adminNome: currentAdmin.nome,
+        acao: acao,
+        detalhes: detalhes,
+        data: new Date().toISOString(),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (e) { console.error(e); }
+  }
+
+  // CORREÇÃO: Limpeza automática de OS órfãs (técnico não existe mais)
+  async function limparOSOrfas() {
+    const tecnicosIds = new Set(tecnicos.map(t => t.id));
+    let alterado = false;
+    const tipos = ["instalacao", "mudanca", "suporte", "mesh", "roku"];
+    for (const tipo of tipos) {
+      const originalLength = dadosServicos[tipo].length;
+      dadosServicos[tipo] = dadosServicos[tipo].filter(servico => tecnicosIds.has(servico.tecnicoId));
+      if (dadosServicos[tipo].length !== originalLength) alterado = true;
+    }
+    if (alterado) {
+      await db.collection(COLLECTION_APP).doc("servicos").set({ value: dadosServicos });
+      console.log("OS órfãs removidas automaticamente.");
+      if (currentAdmin) {
+        await adicionarLog("Limpeza Automática", "Removidas OS com técnicos inexistentes.");
+      }
+    }
+  }
+
+  async function carregarDadosFirestore() {
+    const servicosSnap = await db.collection(COLLECTION_APP).doc("servicos").get();
+    if (servicosSnap.exists) {
+      dadosServicos = servicosSnap.data().value;
+      ["instalacao","mudanca","suporte","mesh","roku"].forEach(t => { if (!dadosServicos[t]) dadosServicos[t] = []; });
+    }
+    const precosSnap = await db.collection(COLLECTION_APP).doc("precos").get();
+    if (precosSnap.exists) precos = precosSnap.data().value;
+    const tecSnap = await db.collection(COLLECTION_TECNICOS).get();
+    tecnicos = [];
+    tecSnap.forEach(doc => tecnicos.push({ id: doc.id, ...doc.data() }));
+    
+    // Executa limpeza de OS órfãs baseada nos técnicos atuais
+    await limparOSOrfas();
+  }
+
+  async function salvarPrecosFirestore() {
+    await db.collection(COLLECTION_APP).doc("precos").set({ value: precos });
+  }
+
+  async function atualizarDashboard() {
+    const totalInst = dadosServicos.instalacao.length;
+    const totalMud = dadosServicos.mudanca.length;
+    const totalSup = dadosServicos.suporte.length;
+    const totalMesh = dadosServicos.mesh.length;
+    const totalRoku = dadosServicos.roku.length;
+    const totalGeral = totalInst + totalMud + totalSup + totalMesh + totalRoku;
+    const faturamento = (totalInst * precos.instalacao) + (totalMud * precos.mudanca) + (totalSup * precos.suporte) +
+                        (totalMesh * precos.mesh) + (totalRoku * precos.roku);
+    document.getElementById("statsCards").innerHTML = `
+      <div class="card-stats"><p>🔧 Instalações</p><div class="stat-number">${totalInst}</div></div>
+      <div class="card-stats"><p>📦 Mudanças</p><div class="stat-number">${totalMud}</div></div>
+      <div class="card-stats"><p>🛠️ Suportes</p><div class="stat-number">${totalSup}</div></div>
+      <div class="card-stats"><p>📡 Mesh</p><div class="stat-number">${totalMesh}</div></div>
+      <div class="card-stats"><p>📺 Roku</p><div class="stat-number">${totalRoku}</div></div>
+      <div class="card-stats"><p>📊 Total OS</p><div class="stat-number">${totalGeral}</div></div>
+      <div class="card-stats"><p>💰 Faturamento</p><div class="stat-number">R$ ${faturamento.toFixed(2)}</div></div>
+    `;
+    const ctxTipo = document.getElementById("adminGraficoTipo").getContext("2d");
+    if (chartTipo) chartTipo.destroy();
+    chartTipo = new Chart(ctxTipo, {
+      type: 'doughnut',
+      data: { labels: ["Instalação","Mudança","Suporte","Mesh","Roku"], datasets: [{ data: [totalInst, totalMud, totalSup, totalMesh, totalRoku], backgroundColor: ["#3b82f6","#f97316","#10b981","#a855f7","#ec4899"] }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+    const meses = [];
+    const contagemMensal = {};
+    const hoje = new Date();
+    for (let i = 5; i >= 0; i--) {
+      let d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      let key = `${d.getFullYear()}-${d.getMonth()+1}`;
+      meses.push(d.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }));
+      contagemMensal[key] = 0;
+    }
+    const todosServicos = [...dadosServicos.instalacao, ...dadosServicos.mudanca, ...dadosServicos.suporte, ...dadosServicos.mesh, ...dadosServicos.roku];
+    todosServicos.forEach(s => {
+      let [dia, mes, ano] = s.data.dia.split('/');
+      let key = `${ano}-${mes}`;
+      if (contagemMensal[key] !== undefined) contagemMensal[key]++;
+    });
+    const dadosMensais = Object.values(contagemMensal);
+    const ctxMensal = document.getElementById("adminGraficoMensal").getContext("2d");
+    if (chartMensal) chartMensal.destroy();
+    chartMensal = new Chart(ctxMensal, {
+      type: 'bar',
+      data: { labels: meses, datasets: [{ label: 'Quantidade de OS', data: dadosMensais, backgroundColor: '#3b82f6' }] },
+      options: { responsive: true }
+    });
+  }
+
+  function calcularTotalOSPorTecnico(tecnicoId) {
+    let total = 0;
+    total += dadosServicos.instalacao.filter(s => s.tecnicoId === tecnicoId).length;
+    total += dadosServicos.mudanca.filter(s => s.tecnicoId === tecnicoId).length;
+    total += dadosServicos.suporte.filter(s => s.tecnicoId === tecnicoId).length;
+    total += dadosServicos.mesh.filter(s => s.tecnicoId === tecnicoId).length;
+    total += dadosServicos.roku.filter(s => s.tecnicoId === tecnicoId).length;
+    return total;
+  }
+
+  function calcularFaturamentoTecnico(tecnicoId) {
+    let fat = 0;
+    fat += dadosServicos.instalacao.filter(s => s.tecnicoId === tecnicoId).length * precos.instalacao;
+    fat += dadosServicos.mudanca.filter(s => s.tecnicoId === tecnicoId).length * precos.mudanca;
+    fat += dadosServicos.suporte.filter(s => s.tecnicoId === tecnicoId).length * precos.suporte;
+    fat += dadosServicos.mesh.filter(s => s.tecnicoId === tecnicoId).length * precos.mesh;
+    fat += dadosServicos.roku.filter(s => s.tecnicoId === tecnicoId).length * precos.roku;
+    return fat;
+  }
+
+  async function renderizarTecnicos() {
+    const tbody = document.getElementById("tecnicosTableBody");
+    tbody.innerHTML = "";
+    for (const t of tecnicos) {
+      const totalOS = calcularTotalOSPorTecnico(t.id);
+      const fat = calcularFaturamentoTecnico(t.id);
+      tbody.innerHTML += `<tr><td>${escapeHtml(t.nome)}</td><td>${t.role === 'admin' ? 'Administrador' : 'Técnico'}</td><td>${totalOS}</td><td>R$ ${fat.toFixed(2)}</td><td><button class="sec" onclick="editarTecnico('${t.id}')">✏️</button> <button class="danger" onclick="removerTecnico('${t.id}')">🗑️</button></td></tr>`;
+    }
+  }
+
+  async function adicionarTecnicoAdmin(nome, senha, role) {
+    const senhaHash = await hashPassword(senha);
+    await db.collection(COLLECTION_TECNICOS).add({ nome, senhaHash, role });
+    await adicionarLog("Criar Técnico", `Nome: ${nome}, Papel: ${role}`);
+    await carregarDadosFirestore();
+    await renderizarTecnicos();
+    popularFiltros();
+    atualizarDashboard();
+    renderizarTabelaOS({});
+  }
+
+  async function editarTecnico(id) {
+    const tecnico = tecnicos.find(t => t.id === id);
+    const novoNome = prompt("Novo nome:", tecnico.nome);
+    if (novoNome && novoNome !== tecnico.nome) {
+      await db.collection(COLLECTION_TECNICOS).doc(id).update({ nome: novoNome });
+      await adicionarLog("Editar Técnico", `ID: ${id}, Novo nome: ${novoNome}`);
+      await carregarDadosFirestore();
+      await renderizarTecnicos();
+      popularFiltros();
+      renderizarTabelaOS({});
+    }
+    const novaSenha = prompt("Digite nova senha (deixe em branco para não alterar):");
+    if (novaSenha && novaSenha.trim()) {
+      const hash = await hashPassword(novaSenha);
+      await db.collection(COLLECTION_TECNICOS).doc(id).update({ senhaHash: hash });
+      await adicionarLog("Alterar Senha", `Técnico: ${tecnico.nome}`);
+      mostrarToast("Senha alterada!");
+    }
+  }
+
+  // CORREÇÃO PRINCIPAL: exclusão em cascata (remove técnico e TODAS as suas OS)
+  async function removerTecnico(id) {
+    const tecnico = tecnicos.find(t => t.id === id);
+    if (!tecnico) return;
+    if (!confirm(`Remover técnico "${tecnico.nome}" e TODAS as suas Ordens de Serviço? Esta ação é irreversível.`)) return;
+    
+    let alterado = false;
+    const tipos = ["instalacao", "mudanca", "suporte", "mesh", "roku"];
+    for (const tipo of tipos) {
+      const originalLength = dadosServicos[tipo].length;
+      dadosServicos[tipo] = dadosServicos[tipo].filter(s => s.tecnicoId !== id);
+      if (dadosServicos[tipo].length !== originalLength) alterado = true;
+    }
+    
+    if (alterado) {
+      await db.collection(COLLECTION_APP).doc("servicos").set({ value: dadosServicos });
+      await adicionarLog("Remover Técnico e OS", `Técnico: ${tecnico.nome} (${id}) - Todas as suas OS foram excluídas.`);
+    } else {
+      await adicionarLog("Remover Técnico", `Técnico: ${tecnico.nome} (${id}) - Nenhuma OS associada.`);
+    }
+    
+    await db.collection(COLLECTION_TECNICOS).doc(id).delete();
+    await carregarDadosFirestore();   // Recarrega técnicos e serviços (já limpos)
+    await renderizarTecnicos();
+    popularFiltros();
+    renderizarTabelaOS({});
+    await atualizarDashboard();
+    mostrarToast(`Técnico "${tecnico.nome}" e suas OS foram removidos com sucesso.`);
+  }
+
+  function listarTodasOS(filtros = {}) {
+    let lista = [];
+    const tipos = ["instalacao","mudanca","suporte","mesh","roku"];
+    const nomeTipo = { instalacao:"Instalação", mudanca:"Mudança", suporte:"Suporte", mesh:"Mesh", roku:"Roku" };
+    tipos.forEach(tipo => {
+      dadosServicos[tipo].forEach(s => {
+        lista.push({
+          data: s.data.dia,
+          timestamp: s.data.timestamp,
+          tipo: nomeTipo[tipo],
+          tipoRaw: tipo,
+          cliente: s.nome,
+          tecnicoId: s.tecnicoId,
+          tecnicoNome: tecnicos.find(t => t.id === s.tecnicoId)?.nome || "Desconhecido",
+          detalhes: s.texto
+        });
+      });
+    });
+    if (filtros.cliente) lista = lista.filter(s => s.cliente.toLowerCase().includes(filtros.cliente.toLowerCase()));
+    if (filtros.tipo) lista = lista.filter(s => s.tipoRaw === filtros.tipo);
+    if (filtros.tecnicoId) lista = lista.filter(s => s.tecnicoId === filtros.tecnicoId);
+    if (filtros.dataInicio) {
+      const inicio = new Date(filtros.dataInicio);
+      lista = lista.filter(s => new Date(s.data.split('/').reverse().join('-')) >= inicio);
+    }
+    if (filtros.dataFim) {
+      const fim = new Date(filtros.dataFim);
+      fim.setHours(23,59,59);
+      lista = lista.filter(s => new Date(s.data.split('/').reverse().join('-')) <= fim);
+    }
+    lista.sort((a,b) => b.timestamp - a.timestamp);
+    return lista;
+  }
+
+  function verDetalhesOS(detalhes) {
+    const modal = document.getElementById("detalhesModal");
+    const pre = document.getElementById("detalhesTexto");
+    pre.textContent = detalhes;
+    modal.classList.add("active");
+  }
+
+  function fecharModalDetalhes() {
+    document.getElementById("detalhesModal").classList.remove("active");
+  }
+
+  function renderizarTabelaOS(filtros) {
+    const lista = listarTodasOS(filtros);
+    const tbody = document.getElementById("servicosTableBody");
+    tbody.innerHTML = "";
+    lista.forEach(os => {
+      const detalhesEscapado = os.detalhes.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      tbody.innerHTML += `<tr><td>${os.data}</td><td>${os.tipo}</td><td>${escapeHtml(os.cliente)}</td><td>${escapeHtml(os.tecnicoNome)}</td><td><button class="sec" onclick="verDetalhesOS('${detalhesEscapado.replace(/\n/g, '\\n')}')">Ver detalhes</button></td></tr>`;
+    });
+  }
+
+  function popularFiltros() {
+    const selectTec = document.getElementById("filterTecnico");
+    selectTec.innerHTML = '<option value="">Todos os técnicos</option>';
+    tecnicos.forEach(t => {
+      selectTec.innerHTML += `<option value="${t.id}">${escapeHtml(t.nome)}</option>`;
+    });
+  }
+
+  async function carregarLogs() {
+    const tbody = document.getElementById("logsTableBody");
+    const semLogsMsg = document.getElementById("semLogsMsg");
+    try {
+      const snapshot = await db.collection(COLLECTION_LOGS).orderBy("timestamp", "desc").limit(200).get();
+      tbody.innerHTML = "";
+      if (snapshot.empty) {
+        semLogsMsg.style.display = "block";
+        return;
+      }
+      semLogsMsg.style.display = "none";
+      snapshot.forEach(doc => {
+        const log = doc.data();
+        const dataStr = log.data ? new Date(log.data).toLocaleString("pt-BR") : "-";
+        tbody.innerHTML += `<tr><td>${dataStr}</td><td>${escapeHtml(log.adminNome || "")}</td><td>${escapeHtml(log.acao)}</td><td>${escapeHtml(log.detalhes || "")}</td></tr>`;
+      });
+    } catch (err) {
+      console.error(err);
+      tbody.innerHTML = `<tr><td colspan="4">Erro ao carregar logs: ${err.message}</td></tr>`;
+    }
+  }
+
+  function exportarExcelCompleto() {
+    const wsData = [["Tipo","Cliente","Data","Técnico","Detalhes"]];
+    const tipos = ["instalacao","mudanca","suporte","mesh","roku"];
+    tipos.forEach(tipo => {
+      dadosServicos[tipo].forEach(s => {
+        const tecnicoNome = tecnicos.find(t => t.id === s.tecnicoId)?.nome || "Geral";
+        wsData.push([tipo, s.nome, s.data.full, tecnicoNome, s.texto]);
+      });
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsData), "Todas OS");
+    XLSX.writeFile(wb, `nexus_admin_${new Date().toISOString().slice(0,19)}.xlsx`);
+    adicionarLog("Exportar Excel", "Exportação completa");
+  }
+
+  async function exportarPDFCompleto() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape' });
+    doc.text("Relatório Completo - Nexus Admin", 14, 20);
+    doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 14, 30);
+    const tabela = [];
+    const tipos = ["instalacao","mudanca","suporte","mesh","roku"];
+    tipos.forEach(tipo => {
+      dadosServicos[tipo].forEach(s => {
+        const tecnicoNome = tecnicos.find(t => t.id === s.tecnicoId)?.nome || "Geral";
+        tabela.push([tipo, s.nome, s.data.dia, tecnicoNome]);
+      });
+    });
+    doc.autoTable({ head: [["Tipo","Cliente","Data","Técnico"]], body: tabela, startY: 40 });
+    doc.save(`nexus_admin_${new Date().toISOString().slice(0,19)}.pdf`);
+    adicionarLog("Exportar PDF", "Exportação completa");
+  }
+
+  async function exportarJSONBackup() {
+    const backup = { servicos: dadosServicos, precos: precos, data: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `nexus_backup_admin_${new Date().toISOString().slice(0,19)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    adicionarLog("Exportar JSON", "Backup completo");
+  }
+
+  function importarJSON() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async ev => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (confirm("Substituir todos os dados? Isso afetará todos os técnicos.")) {
+            dadosServicos = data.servicos;
+            precos = data.precos;
+            await db.collection(COLLECTION_APP).doc("servicos").set({ value: dadosServicos });
+            await db.collection(COLLECTION_APP).doc("precos").set({ value: precos });
+            await adicionarLog("Importar JSON", "Substituição completa de dados");
+            mostrarToast("Dados importados com sucesso!");
+            location.reload();
+          }
+        } catch (err) { mostrarToast("Arquivo inválido", "erro"); }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+
+  function carregarPrecosUI() {
+    document.getElementById("precoInstalacao").value = precos.instalacao;
+    document.getElementById("precoMudanca").value = precos.mudanca;
+    document.getElementById("precoSuporte").value = precos.suporte;
+    document.getElementById("precoMesh").value = precos.mesh;
+    document.getElementById("precoRoku").value = precos.roku;
+  }
+  async function salvarPrecosAdmin() {
+    precos.instalacao = parseFloat(document.getElementById("precoInstalacao").value);
+    precos.mudanca = parseFloat(document.getElementById("precoMudanca").value);
+    precos.suporte = parseFloat(document.getElementById("precoSuporte").value);
+    precos.mesh = parseFloat(document.getElementById("precoMesh").value);
+    precos.roku = parseFloat(document.getElementById("precoRoku").value);
+    await salvarPrecosFirestore();
+    await adicionarLog("Alterar Preços", JSON.stringify(precos));
+    mostrarToast("Preços atualizados");
+    atualizarDashboard();
+  }
+
+  // ========== PERSISTÊNCIA DE LOGIN ==========
+  function salvarSessaoAdmin(admin) {
+    localStorage.setItem("nexus_admin_auth", JSON.stringify({
+      id: admin.id,
+      nome: admin.nome,
+      role: admin.role
+    }));
+  }
+
+  function limparSessaoAdmin() {
+    localStorage.removeItem("nexus_admin_auth");
+  }
+
+  async function restaurarSessaoAdmin() {
+    const saved = localStorage.getItem("nexus_admin_auth");
+    if (!saved) return false;
+    try {
+      const data = JSON.parse(saved);
+      const doc = await db.collection(COLLECTION_TECNICOS).doc(data.id).get();
+      if (doc.exists && doc.data().role === "admin") {
+        currentAdmin = { id: data.id, nome: data.nome, role: data.role };
+        document.getElementById("adminNomeSpan").innerText = currentAdmin.nome;
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("adminApp").style.display = "block";
+        await carregarDadosFirestore();
+        await renderizarTecnicos();
+        await atualizarDashboard();
+        popularFiltros();
+        renderizarTabelaOS({});
+        carregarPrecosUI();
+        carregarLogs();
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        const dashboardTab = document.querySelector('.tab[data-panel="dashboard"]');
+        if (dashboardTab) dashboardTab.classList.add('active');
+        document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
+        document.getElementById('dashboardPanel').classList.add('active');
+        return true;
+      } else {
+        limparSessaoAdmin();
+        return false;
+      }
+    } catch (e) {
+      console.error(e);
+      limparSessaoAdmin();
+      return false;
+    }
+  }
+
+  async function loginAdmin(nome, senha) {
+    const usuario = tecnicos.find(t => t.nome.toLowerCase() === nome.toLowerCase() && t.role === "admin");
+    if (!usuario) { mostrarToast("Usuário não encontrado ou não é admin", "erro"); return false; }
+    const hash = await hashPassword(senha);
+    if (usuario.senhaHash === hash) {
+      currentAdmin = usuario;
+      salvarSessaoAdmin(currentAdmin);
+      document.getElementById("adminNomeSpan").innerText = currentAdmin.nome;
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("adminApp").style.display = "block";
+      await carregarDadosFirestore();
+      await renderizarTecnicos();
+      await atualizarDashboard();
+      popularFiltros();
+      renderizarTabelaOS({});
+      carregarPrecosUI();
+      carregarLogs();
+      adicionarLog("Login", "Admin entrou no sistema");
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      const dashboardTab = document.querySelector('.tab[data-panel="dashboard"]');
+      if (dashboardTab) dashboardTab.classList.add('active');
+      document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
+      document.getElementById('dashboardPanel').classList.add('active');
+      return true;
+    } else {
+      mostrarToast("Senha incorreta", "erro");
+      return false;
+    }
+  }
+
+  function logoutAdmin() {
+    adicionarLog("Logout", "Admin saiu do sistema");
+    limparSessaoAdmin();
+    currentAdmin = null;
+    document.getElementById("adminApp").style.display = "none";
+    document.getElementById("loginScreen").style.display = "flex";
+    document.getElementById("adminLoginNome").value = "";
+    document.getElementById("adminLoginSenha").value = "";
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    });
+  }
+
+  // ========== EVENTOS E INICIALIZAÇÃO ==========
+  document.getElementById("adminLoginBtn").onclick = async () => {
+    const nome = document.getElementById("adminLoginNome").value.trim();
+    const senha = document.getElementById("adminLoginSenha").value;
+    if (!nome || !senha) { mostrarToast("Preencha usuário e senha", "erro"); return; }
+    await loginAdmin(nome, senha);
+  };
+  document.getElementById("adminLogoutBtn").onclick = () => logoutAdmin();
+
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.onclick = () => {
+      const panelId = tab.dataset.panel;
+      document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+      const targetPanel = document.getElementById(panelId + "Panel");
+      if (targetPanel) targetPanel.classList.add("active");
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      if (panelId === "logs") carregarLogs();
+    };
+  });
+
+  document.getElementById("novoTecnicoBtn").onclick = () => {
+    const nome = prompt("Nome do técnico:");
+    if (!nome) return;
+    const senha = prompt("Senha inicial:");
+    if (!senha) return;
+    const role = confirm("Administrador? (OK = Sim, Cancelar = Técnico comum)") ? "admin" : "user";
+    adicionarTecnicoAdmin(nome, senha, role);
+  };
+
+  document.getElementById("aplicarFiltros").onclick = () => {
+    const filtros = {
+      cliente: document.getElementById("filterCliente").value,
+      tipo: document.getElementById("filterTipo").value,
+      tecnicoId: document.getElementById("filterTecnico").value,
+      dataInicio: document.getElementById("filterDataInicio").value,
+      dataFim: document.getElementById("filterDataFim").value
+    };
+    renderizarTabelaOS(filtros);
+  };
+  document.getElementById("limparFiltros").onclick = () => {
+    document.getElementById("filterCliente").value = "";
+    document.getElementById("filterTipo").value = "";
+    document.getElementById("filterTecnico").value = "";
+    document.getElementById("filterDataInicio").value = "";
+    document.getElementById("filterDataFim").value = "";
+    renderizarTabelaOS({});
+  };
+  document.getElementById("exportarExcelGlobal").onclick = exportarExcelCompleto;
+  document.getElementById("exportarPDFGlobal").onclick = exportarPDFCompleto;
+  document.getElementById("exportarJSONBackup").onclick = exportarJSONBackup;
+  document.getElementById("importarJSONBackup").onclick = importarJSON;
+  document.getElementById("salvarPrecos").onclick = salvarPrecosAdmin;
+  document.getElementById("resetarPrecos").onclick = async () => {
+    precos = { instalacao:75, mudanca:75, suporte:60, mesh:80, roku:70 };
+    await salvarPrecosFirestore();
+    carregarPrecosUI();
+    await adicionarLog("Resetar Preços", "Valores padrão restaurados");
+    mostrarToast("Preços restaurados");
+    atualizarDashboard();
+  };
+  document.getElementById("refreshLogs").onclick = carregarLogs;
+  document.getElementById("exportarOSFiltradas").onclick = () => {
+    const filtros = {
+      cliente: document.getElementById("filterCliente").value,
+      tipo: document.getElementById("filterTipo").value,
+      tecnicoId: document.getElementById("filterTecnico").value,
+      dataInicio: document.getElementById("filterDataInicio").value,
+      dataFim: document.getElementById("filterDataFim").value
+    };
+    const lista = listarTodasOS(filtros);
+    const wsData = [["Data","Tipo","Cliente","Técnico","Detalhes"]];
+    lista.forEach(os => wsData.push([os.data, os.tipo, os.cliente, os.tecnicoNome, os.detalhes]));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsData), "OS Filtradas");
+    XLSX.writeFile(wb, `nexus_filtrado_${new Date().toISOString().slice(0,19)}.xlsx`);
+    adicionarLog("Exportar Filtrados", "Excel com filtros aplicados");
+  };
+
+  // Inicialização
+  (async () => {
+    const tecSnap = await db.collection(COLLECTION_TECNICOS).get();
+    tecnicos = [];
+    tecSnap.forEach(doc => tecnicos.push({ id: doc.id, ...doc.data() }));
+    const hasAdmin = tecnicos.some(t => t.role === "admin");
+    if (!hasAdmin) {
+      const defaultHash = await hashPassword("admin123");
+      await db.collection(COLLECTION_TECNICOS).add({ nome: "Administrador", senhaHash: defaultHash, role: "admin" });
+      mostrarToast("Admin padrão criado: admin / admin123", "sucesso");
+      location.reload();
+      return;
+    }
+    const restaurado = await restaurarSessaoAdmin();
+    if (!restaurado) {
+      document.getElementById("loginScreen").style.display = "flex";
+      document.getElementById("adminApp").style.display = "none";
+    }
+  })();
+</script>
+
+        <style>
+            #pwa-install-btn {
+                position: fixed; bottom: 24px; right: 24px;
+                background: #2563eb; color: white; border: none;
+                border-radius: 60px; padding: 12px 24px; font-weight: bold;
+                cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                z-index: 9999; font-family: system-ui, sans-serif; transition: 0.2s;
+                display: none;
+            }
+            #pwa-install-btn:hover { filter: brightness(0.9); transform: scale(1.02); }
+        </style>
+        <button id="pwa-install-btn">📲 Instalar App</button>
+        <script>
+            (function() {
+                let deferredPrompt;
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    e.preventDefault();
+                    deferredPrompt = e;
+                    const btn = document.getElementById('pwa-install-btn');
+                    if (btn) btn.style.display = 'block';
+                });
+                const installBtn = document.getElementById('pwa-install-btn');
+                if (installBtn) {
+                    installBtn.addEventListener('click', async () => {
+                        if (deferredPrompt) {
+                            deferredPrompt.prompt();
+                            const { outcome } = await deferredPrompt.userChoice;
+                            console.log('Instalação:', outcome);
+                            deferredPrompt = null;
+                            installBtn.style.display = 'none';
+                        } else {
+                            alert('Instalação não disponível. Sirva este arquivo via servidor HTTP/HTTPS.');
+                        }
+                    });
+                }
+            })();
+        </script>
+</body>
+</html>
